@@ -1,0 +1,27 @@
+name: AG-Check
+on:
+  schedule:
+    - cron: '0 * * * *' # 1時間ごとに実行
+  workflow_dispatch: # 手動で動かすボタンを作る
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.9' }
+      - name: Install
+        run: pip install playwright requests && playwright install chromium
+      - name: Restore cache
+        uses: actions/cache@v3
+        with:
+          path: last_content.txt
+          key: last-content-${{ github.run_id }}
+          restore-keys: last-content-
+      - name: Run
+        env:
+          AG_ID: ${{ secrets.AG_ID }}
+          AG_PASS: ${{ secrets.AG_PASS }}
+          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: python main.py
