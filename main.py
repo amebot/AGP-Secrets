@@ -10,37 +10,43 @@ def send_line(message):
 
 def main():
     with sync_playwright() as p:
-        # ブラウザを起動（少し動作を安定させる設定を追加）
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         
         # ログインページへ移動
         page.goto("https://agp.jp.net/staffroom/login.html", wait_until="networkidle")
 
-        # 1. 実際のサイトの入力項目名に合わせて修正
-        # ID入力欄の名前を 'user_id' に修正
-        page.fill('input[name="user_id"]', os.environ["AG_ID"])
-        # パスワード入力欄の名前を 'user_password' に修正
-        page.fill('input[name="user_password"]', os.environ["AG_PASS"])
+        # --- 【修正ポイント】フレームの中を探す ---
+        # サイトの構造に合わせて、適切なフレームを取得します
+        frame = page.frame(name="main") or page.main_frame
         
-        # 2. ログインボタンをクリック
-        page.click('input[type="submit"]')
+        # フレーム内の入力欄を探して入力
+        try:
+            # セレクター（探し方）をより確実に「input要素」に限定
+            frame.wait_for_selector('input[name="user_id"]', timeout=10000)
+            frame.fill('input[name="user_id"]', os.environ["AG_ID"])
+            frame.fill('input[name="user_password"]', os.environ["AG_PASS"])
+            frame.click('input[type="submit"]')
+        except Exception as e:
+            print(f"入力欄が見つかりませんでした: {e}")
+            browser.close()
+            return
+
+        # ログイン後のページに移動したか確認
+        try:
+            page.wait_for_url("**/index.html", timeout=15000)
+        except:
+            print("ログイン後の画面遷移に失敗しました。")
+            browser.close()
+            return
         
-        # 3. ログイン後のページに移動したか確認
-        page.wait_for_url("https://agp.jp.net/staffroom/index.html", timeout=10000)
-        
-        # 4. ページ全体の文字を取得
+        # ログイン後のコンテンツ取得
         content = page.locator('body').inner_text() 
         
-        # 差分保存用のファイル読み込み（エラー回避用）
+        # 差分比較
         cache_file = "last_content.txt"
-        if os.path.exists(cache_file):
-            with open(cache_file, "r", encoding="utf-8") as f:
-                last_content = f.read()
-        else:
-            last_content = ""
+        last_content = open(cache_file).read() if os.path.exists(cache_file) else ""
 
-        # 内容が変わっていたらLINE
         if content != last_content:
             send_line("\n【AG更新通知】\nお仕事情報が更新されました！\nhttps://agp.jp.net/staffroom/index.html")
             with open(cache_file, "w", encoding="utf-8") as f:
