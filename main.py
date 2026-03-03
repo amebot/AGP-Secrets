@@ -13,38 +13,38 @@ def main():
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         
-        # 1. 【最重要】ログインフォームが直接存在するURLへジャンプ
-        # 外枠の login.html ではなく、中身の top.html を直接開きます
-        print("ログインフォームへ直接アクセス中...")
-        page.goto("https://agp.jp.net/staffroom/top.html", wait_until="networkidle")
+        # 1. ログインページへ移動
+        page.goto("https://agp.jp.net/staffroom/login.html", wait_until="networkidle")
 
         try:
-            # 2. 入力欄を探して入力（name属性が user_id / user_password であることを想定）
-            print("ログイン情報を入力中...")
-            page.wait_for_selector('input[name="user_id"]', timeout=10000)
-            page.fill('input[name="user_id"]', os.environ["AG_ID"])
-            page.fill('input[name="user_password"]', os.environ["AG_PASS"])
+            # 2. 【修正】フレームを全無視して「画面上の全入力欄」を取得
+            # サイト内のすべてのフレームをスキャンします
+            for frame in page.frames:
+                inputs = frame.locator('input[type="text"], input[type="password"]')
+                if inputs.count() >= 2:
+                    # 最初の入力欄にID、次をパスワードとみなして入力
+                    inputs.nth(0).fill(os.environ["AG_ID"])
+                    inputs.nth(1).fill(os.environ["AG_PASS"])
+                    # 送信ボタン（submit）を探してクリック
+                    frame.locator('input[type="submit"], button[type="submit"]').first.click()
+                    break
             
-            # 3. ログインボタンをクリック
-            page.click('input[type="submit"]')
-            
-            # 4. ログイン後のメイン画面（index.html）に移動するのを待つ
+            # 3. ログイン後の画面遷移を待つ
             page.wait_for_url("**/index.html", timeout=15000)
-            print("ログイン成功！")
             
-            # 5. 内容を取得（お仕事情報の差分チェック用）
+            # 4. 内容を取得（ここが重要）
             content = page.locator('body').inner_text()
             
-            # 6. 【テスト用】初回だけ必ずLINEを送る（成功確認のため）
-            send_line("\n【AG成功！】\nログインに成功しました！\nこれでお仕事情報の監視ができるようになりました。")
+            # 5. 【テスト用】成功通知
+            send_line("\n【AG成功！】\nついにログインを突破しました！\n監視を継続します。")
             
-            # 7. 内容を保存
+            # 6. 内容保存
             with open("last_content.txt", "w", encoding="utf-8") as f:
                 f.write(content)
                 
         except Exception as e:
-            # 失敗した場合はエラー内容をLINEに送る
-            send_line(f"\n【AGエラー】\n実行中に失敗しました: {str(e)}")
+            # エラーが出たら詳細をLINEへ
+            send_line(f"\n【AG再エラー】\nログイン突破に失敗しました。\n内容: {str(e)}")
                 
         browser.close()
 
